@@ -2,7 +2,7 @@ import os
 from sqlalchemy import *
 from sqlalchemy.orm import create_session, relationship
 from sqlalchemy.ext.declarative import declarative_base
-
+from sqlalchemy import ForeignKeyConstraint
 uri = 'mysql://root@localhost/chembl_25'
 if 'CHEMBL_URI' in os.environ:
     uri = os.environ['CHEMBL_URI']
@@ -10,6 +10,7 @@ if 'CHEMBL_URI' in os.environ:
 Base = declarative_base()
 engine = create_engine(uri)
 metadata = MetaData(bind=engine)
+
 
 
 ### Target
@@ -200,13 +201,56 @@ class MetabolismRefs(Base):
 
 
 ### Compounds
+
 class CompoundProperty(Base):
     __table__ = Table('compound_properties', metadata, autoload=True)
 
+userdk = False
+try:
+    from razi import rdkit_postgresql
+    from razi.rdkit_postgresql.types import Mol
+    from razi.rdkit_postgresql.types import Bfp
+    from rdkit import Chem
+    metadata_rdk = MetaData(schema='rdk', bind=engine)
+    class Mols(Base):
+        __table__ = Table('mols',
+                          metadata_rdk,
+                          Column('molregno', BIGINT, primary_key=True),
+                          Column('m', Mol),
+                          extend_existing=True,
+                          )
+        __table_args__ = (
+            Index('molidx', 'structure',
+                        postgresql_using='gist'),
+
+            )
+
+
+        def __repr__(self):
+            if isinstance(self.m, Chem.Mol):
+                return '(%s) < %s >' % (self.molregno, Chem.MolToSmiles(self.m))
+            return '(%s) < %s >' % (self.molregno, self.m)
+
+    
+    class Fps(Base):
+        __table__ = Table('fps',
+                         metadata_rdk,
+                         Column('molregno', BIGINT, primary_key=True),
+                         Column('torsionbv', Bfp),
+                         Column('mfp2', Bfp),
+                         Column('ffp2', Bfp),
+                         extend_existing=True)
+    print('load rdk schema')
+    userdk = True
+except:
+    print('rdk false')
+    pass    
 
 class CompoundStructure(Base):
     __table__ = Table('compound_structures', metadata, autoload=True)
-
+    if userdk:
+        rdkmols = relationship('Mols', primaryjoin="Mols.molregno==CompoundStructure.molregno", foreign_keys='Mols.molregno')
+        fps =  relationship('Fps', primaryjoin="Fps.molregno==CompoundStructure.molregno", foreign_keys='Fps.molregno')
 
 class MoleculeHierarchy(Base):
     __table__ = Table('molecule_hierarchy', metadata, autoload=True)
@@ -217,7 +261,8 @@ class ResearchCompany(Base):
 
 
 class MoleculeDictionary(Base):
-    __table__ = Table('molecule_dictionary', metadata, autoload=True)
+    #__table__ = Table('molecule_dictionary', metadata, autoload=True)
+    __table__ = Table('molecule_dictionary', metadata,  Column('molregno', BIGINT, primary_key=True), extend_existing=True, autoload=True)   
     compound = relationship('CompoundRecord', uselist=False, backref='molecule')
     structure = relationship('CompoundStructure', uselist=False, backref='molecule')
     property = relationship('CompoundProperty', uselist=False, backref='molecule')
@@ -227,7 +272,6 @@ class MoleculeDictionary(Base):
     #hierarchy = relationship('MoleculeHierarchy', uselist=False, backref='molecule')
     atc_classifications = relationship('AtcClassification', secondary=Table('molecule_atc_classification', metadata, autoload=True), backref='atc_molecules')
     products = relationship('MoleculeDictionary', secondary=Table('formulations', metadata, autoload=True), backref='product_molecules')
-
 
 class MoleculeSynonym(Base):
     __table__ = Table('molecule_synonyms', metadata, autoload=True)
@@ -349,43 +393,7 @@ class Version(Base):
     __table__ = Table('version', metadata, autoload=True)
 
 
-### structure/rdk schema
 
-try:
-    from razi import rdkit_postgresql
-    from razi.rdkit_postgresql.types import Mol
-    from razi.rdkit_postgresql.types import Bfp
-    from rdkit import Chem
-    metadata_rdk = MetaData(schema='rdk')
-    class Mols(Base):
-        __table__ = Table('mols',
-                          metadata_rdk,
-                          Column('molregno', BIGINT, primary_key=True),
-                          Column('m', Mol),
-                          extend_existing=True,
-                          )
-        __table_args__ = (
-            Index('molidx', 'structure',
-                        postgresql_using='gist'),
-            )
-    
-        def __repr__(self):
-            if isinstance(self.m, Chem.Mol):
-                return '(%s) < %s >' % (self.molregno, Chem.MolToSmiles(self.m))
-            return '(%s) < %s >' % (self.molregno, self.m)
-    
-    
-    class Fps(Base):
-        __table__ = Table('fps',
-                         metadata_rdk,
-                         Column('molregno', BIGINT, primary_key=True),
-                         Column('torsionbv', Bfp),
-                         Column('mfp2', Bfp),
-                         Column('ffp2', Bfp),
-                         extend_existing=True)
-except:
-    pass
-    
 
 ### Session
 chembldb = create_session(bind=engine)
