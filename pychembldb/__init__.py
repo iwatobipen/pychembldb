@@ -249,8 +249,8 @@ except:
 class CompoundStructure(Base):
     __table__ = Table('compound_structures', metadata, autoload=True)
     if userdk:
-        rdkmols = relationship('Mols', primaryjoin="Mols.molregno==CompoundStructure.molregno", foreign_keys='Mols.molregno')
-        fps =  relationship('Fps', primaryjoin="Fps.molregno==CompoundStructure.molregno", foreign_keys='Fps.molregno')
+        rdkmols = relationship('Mols', uselist=False, primaryjoin="Mols.molregno==CompoundStructure.molregno", foreign_keys='Mols.molregno')
+        fps =  relationship('Fps', uselist=False, primaryjoin="Fps.molregno==CompoundStructure.molregno", foreign_keys='Fps.molregno')
 
 class MoleculeHierarchy(Base):
     __table__ = Table('molecule_hierarchy', metadata, autoload=True)
